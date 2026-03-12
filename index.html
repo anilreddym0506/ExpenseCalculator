@@ -18,7 +18,7 @@
             <button class="tab-btn" data-tab="manage-categories">Manage Categories</button>
             <button class="tab-btn" data-tab="view-expenses">View Expenses</button>
             <button class="tab-btn" data-tab="recurring">Recurring</button>
-            <button class="tab-btn" data-tab="emi-chit">EMI/Chit Tracker</button>
+            <button class="tab-btn" data-tab="emi-chit">Loan/Chit Tracker</button>
             <button class="tab-btn" data-tab="summary">Summary</button>
         </nav>
 
@@ -130,126 +130,149 @@
             </div>
         </section>
 
-        <!-- EMI/Chit Tracker Tab -->
+        <!-- Loan/Chit Tracker Tab -->
         <section id="emi-chit" class="tab-content">
-            <h2>EMI/Chit Tracker</h2>
+            <h2>Loan/Chit Tracker</h2>
             
             <!-- Dashboard Cards -->
-            <div class="emi-dashboard">
-                <div class="card">
-                    <h3>Active EMIs/Chits</h3>
-                    <p class="card-value" id="emi-count">0</p>
+                <div class="emi-dashboard">
+                    <div class="card">
+                        <h3>Active Loans/Chits</h3>
+                        <p class="card-value" id="emi-count">0</p>
+                    </div>
+                    <div class="card">
+                        <h3>Total Outstanding</h3>
+                        <p class="card-value" id="emi-pending-amount">₹ 0.00</p>
+                    </div>
+                    <div class="card">
+                        <h3>Total Pending Months</h3>
+                        <p class="card-value" id="emi-pending-months">0</p>
+                    </div>
+                    <div class="card">
+                        <h3>Due This Month</h3>
+                        <p class="card-value" id="emi-due-this-month">₹ 0.00</p>
+                    </div>
                 </div>
-                <div class="card">
-                    <h3>Total Pending Amount</h3>
-                    <p class="card-value" id="emi-pending-amount">₹ 0.00</p>
-                </div>
-                <div class="card">
-                    <h3>Total Pending Months</h3>
-                    <p class="card-value" id="emi-pending-months">0</p>
-                </div>
-                <div class="card">
-                    <h3>EMI Due This Month</h3>
-                    <p class="card-value" id="emi-due-this-month">₹ 0.00</p>
-                </div>
-            </div>
 
-            <!-- Add/Edit EMI Form -->
-            <h3 style="margin-top: 2rem;">Add New EMI/Chit</h3>
-            <form id="emi-form" class="form-group">
-                <div class="form-row">
-                    <div class="form-field">
-                        <label for="emi-type">Type:</label>
-                        <select id="emi-type" required>
-                            <option value="">-- Select Type --</option>
-                            <option value="EMI">EMI</option>
+                <!-- Add/Edit Loan/Chit Form -->
+                <h3 style="margin-top: 2rem;">Add New Loan/Chit</h3>
+                <form id="emi-form" class="form-group">
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label for="emi-type">Type:</label>
+                            <select id="emi-type" required>
+                                <option value="">-- Select Type --</option>
+                                <option value="Loan">Loan</option>
+                                <option value="Chit">Chit</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="emi-name">Name:</label>
+                            <input type="text" id="emi-name" placeholder="e.g., Bike Loan / Office Chit" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-field loan-only-field">
+                            <label for="emi-principal">Loan Principal Value (₹):</label>
+                            <input type="number" id="emi-principal" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="form-field chit-only-field">
+                            <label for="emi-chit-value">Chit Value (₹):</label>
+                            <input type="number" id="emi-chit-value" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="form-field">
+                            <label for="emi-monthly">Monthly Amount (₹):</label>
+                            <input type="number" id="emi-monthly" step="0.01" placeholder="0.00" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label for="emi-start-month">Start Month:</label>
+                            <input type="month" id="emi-start-month" required>
+                        </div>
+                        <div class="form-field">
+                            <label for="emi-end-month">End Month:</label>
+                            <input type="month" id="emi-end-month" required>
+                        </div>
+                    </div>
+                    <p id="emi-month-warning" class="inline-warning" aria-live="polite"></p>
+
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label for="emi-total-months">Total Months:</label>
+                            <input type="number" id="emi-total-months" placeholder="0" readonly>
+                        </div>
+                        <div class="form-field">
+                            <label for="emi-pending-months-input">Remaining Months:</label>
+                            <input type="number" id="emi-pending-months-input" placeholder="0" readonly>
+                        </div>
+                    </div>
+
+                    <div class="form-row loan-only-field">
+                        <div class="form-field">
+                            <label for="emi-bank">Lender Name:</label>
+                            <input type="text" id="emi-bank" placeholder="e.g., HDFC Bank">
+                        </div>
+                        <div class="form-field">
+                            <label for="emi-loan-type">Loan Type:</label>
+                            <input type="text" id="emi-loan-type" placeholder="e.g., Home Loan">
+                        </div>
+                    </div>
+
+                    <div class="form-row loan-only-field">
+                        <div class="form-field">
+                            <label for="emi-interest-rate">Interest Rate (%):</label>
+                            <input type="number" id="emi-interest-rate" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="form-field">
+                            <label for="emi-loan-formula">Loan Formula:</label>
+                            <select id="emi-loan-formula">
+                                <option value="reducing">Reducing Balance</option>
+                                <option value="flat">Flat Rate</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p id="emi-loan-formula-help" class="formula-help loan-only-field" aria-live="polite"></p>
+
+                    <div class="form-row loan-only-field">
+                        <div class="form-field">
+                            <label for="emi-outstanding-amount">Outstanding Amount (₹):</label>
+                            <input type="number" id="emi-outstanding-amount" step="0.01" placeholder="0.00" readonly>
+                        </div>
+                    </div>
+
+                    <div class="form-row loan-only-field">
+                        <div class="form-field" style="grid-column: 1 / -1;">
+                            <label for="emi-interest-payable">Interest Yet To Pay (₹):</label>
+                            <input type="number" id="emi-interest-payable" step="0.01" placeholder="0.00" readonly>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-field" style="grid-column: 1 / -1;">
+                            <label for="emi-notes">Notes:</label>
+                            <textarea id="emi-notes" rows="3" placeholder="Additional information..."></textarea>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Add Loan/Chit</button>
+                </form>
+                <div id="emi-form-message" class="message"></div>
+
+                <!-- Loan/Chit List -->
+                <h3 style="margin-top: 2rem;">All Loan/Chit Records</h3>
+                <div class="filters" style="margin-bottom: 1.5rem;">
+                    <div class="filter-group">
+                        <label for="emi-filter-type">Filter by Type:</label>
+                        <select id="emi-filter-type">
+                            <option value="">-- All Types --</option>
+                            <option value="Loan">Loan</option>
                             <option value="Chit">Chit</option>
                         </select>
                     </div>
-                    <div class="form-field">
-                        <label for="emi-description">Description:</label>
-                        <input type="text" id="emi-description" placeholder="e.g., Car Loan EMI" required>
-                    </div>
                 </div>
-
-                <div class="form-row">
-                    <div class="form-field">
-                        <label for="emi-principal">Principal Amount (₹):</label>
-                        <input type="number" id="emi-principal" step="0.01" placeholder="0.00" required>
-                    </div>
-                    <div class="form-field">
-                        <label for="emi-total-amount">Total EMI Amount (₹):</label>
-                        <input type="number" id="emi-total-amount" step="0.01" placeholder="0.00" required>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-field">
-                        <label for="emi-monthly">Monthly EMI Amount (₹):</label>
-                        <input type="number" id="emi-monthly" step="0.01" placeholder="0.00" required>
-                    </div>
-                    <div class="form-field">
-                        <label for="emi-total-months">Total Months:</label>
-                        <input type="number" id="emi-total-months" placeholder="0" required>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-field">
-                        <label for="emi-pending-months">Months Pending:</label>
-                        <input type="number" id="emi-pending-months-input" placeholder="0" required>
-                    </div>
-                    <div class="form-field">
-                        <label for="emi-interest-rate">Interest Rate (%):</label>
-                        <input type="number" id="emi-interest-rate" step="0.01" placeholder="0.00">
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-field">
-                        <label for="emi-start-date">Start Date:</label>
-                        <input type="date" id="emi-start-date" required>
-                    </div>
-                    <div class="form-field">
-                        <label for="emi-maturity-date">Maturity/End Date:</label>
-                        <input type="date" id="emi-maturity-date" required>
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-field">
-                        <label for="emi-due-date">EMI Due Date (YYYY-MM-DD):</label>
-                        <input type="date" id="emi-due-date" required>
-                    </div>
-                    <div class="form-field">
-                        <label for="emi-bank">Bank/Lender Name:</label>
-                        <input type="text" id="emi-bank" placeholder="e.g., HDFC Bank">
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-field" style="grid-column: 1 / -1;">
-                        <label for="emi-notes">Notes:</label>
-                        <textarea id="emi-notes" rows="3" placeholder="Additional information..."></textarea>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn btn-primary">Add EMI/Chit</button>
-            </form>
-            <div id="emi-form-message" class="message"></div>
-
-            <!-- EMI List -->
-            <h3 style="margin-top: 2rem;">All EMI/Chit Records</h3>
-            <div class="filters" style="margin-bottom: 1.5rem;">
-                <div class="filter-group">
-                    <label for="emi-filter-type">Filter by Type:</label>
-                    <select id="emi-filter-type">
-                        <option value="">-- All Types --</option>
-                        <option value="EMI">EMI</option>
-                        <option value="Chit">Chit</option>
-                    </select>
-                </div>
-            </div>
             <div id="emi-list" class="expenses-table">
                 <!-- EMI records will be populated here -->
             </div>
@@ -327,53 +350,100 @@
         </div>
     </div>
 
-    <!-- Edit EMI Modal -->
+    <!-- Edit Loan/Chit Modal -->
     <div id="edit-emi-modal" class="modal">
         <div class="modal-content">
             <span class="close close-emi">&times;</span>
-            <h2>Edit EMI/Chit</h2>
+            <h2>Edit Loan/Chit</h2>
             <form id="edit-emi-form" class="form-group">
                 <div class="form-row">
                     <div class="form-field">
                         <label for="edit-emi-type">Type:</label>
                         <select id="edit-emi-type" required>
-                            <option value="EMI">EMI</option>
+                            <option value="Loan">Loan</option>
                             <option value="Chit">Chit</option>
                         </select>
                     </div>
                     <div class="form-field">
-                        <label for="edit-emi-description">Description:</label>
-                        <input type="text" id="edit-emi-description" required>
+                        <label for="edit-emi-name">Name:</label>
+                        <input type="text" id="edit-emi-name" required>
                     </div>
                 </div>
                 <div class="form-row">
-                    <div class="form-field">
-                        <label for="edit-emi-principal">Principal Amount (₹):</label>
-                        <input type="number" id="edit-emi-principal" step="0.01" required>
+                    <div class="form-field edit-loan-only-field">
+                        <label for="edit-emi-principal">Loan Principal Value (₹):</label>
+                        <input type="number" id="edit-emi-principal" step="0.01">
+                    </div>
+                    <div class="form-field edit-chit-only-field">
+                        <label for="edit-emi-chit-value">Chit Value (₹):</label>
+                        <input type="number" id="edit-emi-chit-value" step="0.01">
                     </div>
                     <div class="form-field">
-                        <label for="edit-emi-total-amount">Total EMI Amount (₹):</label>
-                        <input type="number" id="edit-emi-total-amount" step="0.01" required>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-field">
-                        <label for="edit-emi-monthly">Monthly EMI Amount (₹):</label>
+                        <label for="edit-emi-monthly">Monthly Amount (₹):</label>
                         <input type="number" id="edit-emi-monthly" step="0.01" required>
                     </div>
-                    <div class="form-field">
-                        <label for="edit-emi-pending">Months Pending:</label>
-                        <input type="number" id="edit-emi-pending" required>
-                    </div>
                 </div>
                 <div class="form-row">
                     <div class="form-field">
-                        <label for="edit-emi-due-date">EMI Due Date:</label>
-                        <input type="date" id="edit-emi-due-date" required>
+                        <label for="edit-emi-start-month">Start Month:</label>
+                        <input type="month" id="edit-emi-start-month" required>
                     </div>
                     <div class="form-field">
-                        <label for="edit-emi-bank">Bank/Lender Name:</label>
+                        <label for="edit-emi-end-month">End Month:</label>
+                        <input type="month" id="edit-emi-end-month" required>
+                    </div>
+                </div>
+                <p id="edit-emi-month-warning" class="inline-warning" aria-live="polite"></p>
+                <div class="form-row">
+                    <div class="form-field">
+                        <label for="edit-emi-total-months">Total Months:</label>
+                        <input type="number" id="edit-emi-total-months" readonly>
+                    </div>
+                    <div class="form-field">
+                        <label for="edit-emi-pending">Remaining Months:</label>
+                        <input type="number" id="edit-emi-pending" readonly>
+                    </div>
+                </div>
+                <div class="form-row edit-loan-only-field">
+                    <div class="form-field">
+                        <label for="edit-emi-bank">Lender Name:</label>
                         <input type="text" id="edit-emi-bank">
+                    </div>
+                    <div class="form-field">
+                        <label for="edit-emi-loan-type">Loan Type:</label>
+                        <input type="text" id="edit-emi-loan-type">
+                    </div>
+                </div>
+                <div class="form-row edit-loan-only-field">
+                    <div class="form-field">
+                        <label for="edit-emi-interest-rate">Interest Rate (%):</label>
+                        <input type="number" id="edit-emi-interest-rate" step="0.01">
+                    </div>
+                    <div class="form-field">
+                        <label for="edit-emi-loan-formula">Loan Formula:</label>
+                        <select id="edit-emi-loan-formula">
+                            <option value="reducing">Reducing Balance</option>
+                            <option value="flat">Flat Rate</option>
+                            </select>
+                        </div>
+                </div>
+                <p id="edit-emi-loan-formula-help" class="formula-help edit-loan-only-field" aria-live="polite"></p>
+                <div class="form-row edit-loan-only-field">
+                    <div class="form-field">
+                        <label for="edit-emi-outstanding-amount">Outstanding Amount (₹):</label>
+                        <input type="number" id="edit-emi-outstanding-amount" step="0.01" readonly>
+                    </div>
+                </div>
+                <div class="form-row edit-loan-only-field">
+                    <div class="form-field" style="grid-column: 1 / -1;">
+                        <label for="edit-emi-interest-payable">Interest Yet To Pay (₹):</label>
+                        <input type="number" id="edit-emi-interest-payable" step="0.01" readonly>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-field" style="grid-column: 1 / -1;">
+                        <label for="edit-emi-notes">Notes:</label>
+                        <textarea id="edit-emi-notes" rows="3"></textarea>
                     </div>
                 </div>
                 <div class="modal-buttons">

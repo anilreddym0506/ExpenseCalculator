@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'ExpenseTrackerDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let db;
 
@@ -67,7 +67,12 @@ function initializeDB() {
                 const emiStore = db.createObjectStore('emis', { keyPath: 'id', autoIncrement: true });
                 emiStore.createIndex('type', 'type');
                 emiStore.createIndex('status', 'status');
-                emiStore.createIndex('dueDate', 'dueDate');
+                emiStore.createIndex('startMonth', 'startMonth');
+            } else {
+                const emiStore = event.target.transaction.objectStore('emis');
+                if (!emiStore.indexNames.contains('startMonth')) {
+                    emiStore.createIndex('startMonth', 'startMonth');
+                }
             }
         };
 
@@ -389,18 +394,21 @@ function addEMI(emi) {
         const transaction = db.transaction(['emis'], 'readwrite');
         const store = transaction.objectStore('emis');
         const request = store.add({
-            type: emi.type, // 'EMI' or 'Chit'
-            description: emi.description,
-            principalAmount: parseFloat(emi.principalAmount),
-            totalEmiAmount: parseFloat(emi.totalEmiAmount),
-            monthlyEmiAmount: parseFloat(emi.monthlyEmiAmount),
-            startDate: emi.startDate,
-            maturityDate: emi.maturityDate,
-            dueDate: emi.dueDate,
-            totalMonths: parseInt(emi.totalMonths),
-            monthsPending: parseInt(emi.monthsPending),
+            type: emi.type, // 'Loan' or 'Chit'
+            name: emi.name,
+            monthlyAmount: parseFloat(emi.monthlyAmount),
+            startMonth: emi.startMonth,
+            endMonth: emi.endMonth,
+            totalMonths: parseInt(emi.totalMonths, 10),
+            remainingMonths: parseInt(emi.remainingMonths, 10),
+            chitValue: emi.chitValue ? parseFloat(emi.chitValue) : null,
+            principalAmount: emi.principalAmount ? parseFloat(emi.principalAmount) : null,
+            lenderName: emi.lenderName || '',
+            loanType: emi.loanType || '',
+            loanFormula: emi.loanFormula || 'reducing',
             interestRate: emi.interestRate ? parseFloat(emi.interestRate) : 0,
-            bankName: emi.bankName,
+            outstandingAmount: emi.outstandingAmount ? parseFloat(emi.outstandingAmount) : 0,
+            interestPayable: emi.interestPayable ? parseFloat(emi.interestPayable) : 0,
             notes: emi.notes,
             status: 'active',
             createdAt: new Date()
@@ -424,17 +432,20 @@ function updateEMI(id, emi) {
             const updated = {
                 ...data,
                 type: emi.type,
-                description: emi.description,
-                principalAmount: parseFloat(emi.principalAmount),
-                totalEmiAmount: parseFloat(emi.totalEmiAmount),
-                monthlyEmiAmount: parseFloat(emi.monthlyEmiAmount),
-                startDate: emi.startDate,
-                maturityDate: emi.maturityDate,
-                dueDate: emi.dueDate,
-                totalMonths: parseInt(emi.totalMonths),
-                monthsPending: parseInt(emi.monthsPending),
+                name: emi.name,
+                monthlyAmount: parseFloat(emi.monthlyAmount),
+                startMonth: emi.startMonth,
+                endMonth: emi.endMonth,
+                totalMonths: parseInt(emi.totalMonths, 10),
+                remainingMonths: parseInt(emi.remainingMonths, 10),
+                chitValue: emi.chitValue ? parseFloat(emi.chitValue) : null,
+                principalAmount: emi.principalAmount ? parseFloat(emi.principalAmount) : null,
+                lenderName: emi.lenderName || '',
+                loanType: emi.loanType || '',
+                loanFormula: emi.loanFormula || 'reducing',
                 interestRate: emi.interestRate ? parseFloat(emi.interestRate) : 0,
-                bankName: emi.bankName,
+                outstandingAmount: emi.outstandingAmount ? parseFloat(emi.outstandingAmount) : 0,
+                interestPayable: emi.interestPayable ? parseFloat(emi.interestPayable) : 0,
                 notes: emi.notes
             };
             const request = store.put(updated);
@@ -489,23 +500,17 @@ function getEMIsByType(type) {
 }
 
 /**
- * Calculate days until EMI due date
- */
-function daysTillDue(dueDate) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(dueDate);
-    due.setHours(0, 0, 0, 0);
-    const diffTime = due - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-}
-
-/**
  * Calculate total pending amount for EMI
  */
 function calculatePendingAmount(monthlyEmiAmount, monthsPending) {
     return monthlyEmiAmount * monthsPending;
+}
+
+function monthToIndex(monthValue) {
+    if (!monthValue || !monthValue.includes('-')) return null;
+    const [year, month] = monthValue.split('-').map(Number);
+    if (!year || !month) return null;
+    return (year * 12) + (month - 1);
 }
 
 /**
@@ -520,17 +525,30 @@ function getEMIDashboardSummary() {
             let totalPendingMonths = 0;
             let emiDueThisMonth = 0;
             const today = new Date();
-            const currentMonth = today.toISOString().slice(0, 7);
+            const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            const currentIndex = monthToIndex(currentMonth);
 
             activeEMIs.forEach(emi => {
-                const pendingAmount = calculatePendingAmount(emi.monthlyEmiAmount, emi.monthsPending);
+                const monthlyAmount = Number(emi.monthlyAmount || emi.monthlyEmiAmount || 0);
+                const remainingMonths = Number(emi.remainingMonths ?? emi.monthsPending ?? 0);
+                const pendingAmount = Number(
+                    emi.outstandingAmount && emi.type === 'Loan'
+                        ? emi.outstandingAmount
+                        : calculatePendingAmount(monthlyAmount, remainingMonths)
+                );
                 totalPendingAmount += pendingAmount;
-                totalPendingMonths += emi.monthsPending;
+                totalPendingMonths += remainingMonths;
 
-                // Check if due this month
-                const dueMonth = emi.dueDate.slice(0, 7);
-                if (dueMonth === currentMonth) {
-                    emiDueThisMonth += emi.monthlyEmiAmount;
+                const startIndex = monthToIndex(emi.startMonth);
+                const endIndex = monthToIndex(emi.endMonth);
+                if (
+                    startIndex !== null &&
+                    endIndex !== null &&
+                    currentIndex !== null &&
+                    currentIndex >= startIndex &&
+                    currentIndex <= endIndex
+                ) {
+                    emiDueThisMonth += monthlyAmount;
                 }
             });
 

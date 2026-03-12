@@ -269,6 +269,20 @@ header .subtitle {
     border: 1px solid #fca5a5;
 }
 
+.inline-warning {
+    color: #b91c1c;
+    font-size: 0.9rem;
+    font-weight: 600;
+    min-height: 1.2rem;
+    margin: -0.5rem 0 0.5rem 0;
+}
+
+.formula-help {
+    color: var(--text-light);
+    font-size: 0.85rem;
+    margin: -0.5rem 0 0.75rem 0;
+}
+
 @keyframes slideIn {
     from {
         transform: translateY(-10px);
@@ -703,7 +717,8 @@ header .subtitle {
     font-weight: 600;
 }
 
-.emi-type-badge.emi {
+.emi-type-badge.emi,
+.emi-type-badge.loan {
     background: #dbeafe;
     color: #1e40af;
 }

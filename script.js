@@ -79,15 +79,35 @@ function setupEventListeners() {
         }
     });
 
-    // EMI/Chit form
+    // Loan/Chit form
     document.getElementById('emi-form').addEventListener('submit', handleAddEMI);
     document.getElementById('emi-filter-type').addEventListener('change', filterEMIs);
+    document.getElementById('emi-type').addEventListener('change', () => {
+        updateMainTypeVisibility();
+        updateMainEMICalculations();
+    });
+    document.getElementById('emi-start-month').addEventListener('change', updateMainEMICalculations);
+    document.getElementById('emi-end-month').addEventListener('change', updateMainEMICalculations);
+    document.getElementById('emi-monthly').addEventListener('input', updateMainEMICalculations);
+    document.getElementById('emi-interest-rate').addEventListener('input', updateMainEMICalculations);
+    document.getElementById('emi-principal').addEventListener('input', updateMainEMICalculations);
+    document.getElementById('emi-loan-formula').addEventListener('change', updateMainEMICalculations);
 
-    // EMI Modal controls
+    // Loan/Chit modal controls
     const emiModal = document.getElementById('edit-emi-modal');
     document.querySelector('.close-emi').addEventListener('click', closeEMIModal);
     document.getElementById('cancel-edit-emi-btn').addEventListener('click', closeEMIModal);
     document.getElementById('edit-emi-form').addEventListener('submit', handleEditEMI);
+    document.getElementById('edit-emi-type').addEventListener('change', () => {
+        updateEditTypeVisibility();
+        updateEditEMICalculations();
+    });
+    document.getElementById('edit-emi-start-month').addEventListener('change', updateEditEMICalculations);
+    document.getElementById('edit-emi-end-month').addEventListener('change', updateEditEMICalculations);
+    document.getElementById('edit-emi-monthly').addEventListener('input', updateEditEMICalculations);
+    document.getElementById('edit-emi-interest-rate').addEventListener('input', updateEditEMICalculations);
+    document.getElementById('edit-emi-principal').addEventListener('input', updateEditEMICalculations);
+    document.getElementById('edit-emi-loan-formula').addEventListener('change', updateEditEMICalculations);
 
     // Close EMI modal when clicking outside
     window.addEventListener('click', (event) => {
@@ -95,6 +115,9 @@ function setupEventListeners() {
             closeEMIModal();
         }
     });
+
+    updateMainTypeVisibility();
+    updateMainEMICalculations();
 }
 
 // ============================================================
@@ -742,9 +765,223 @@ function closeEMIModal() {
 // EMI/Chit Management
 // ============================================================
 
+function parseAmount(value) {
+    const amount = Number(value);
+    return Number.isFinite(amount) ? amount : 0;
+}
+
+function monthToIndex(monthValue) {
+    if (!monthValue || !monthValue.includes('-')) return null;
+    const [year, month] = monthValue.split('-').map(Number);
+    if (!year || !month) return null;
+    return (year * 12) + (month - 1);
+}
+
+function calculateMonthStats(startMonth, endMonth) {
+    const startIndex = monthToIndex(startMonth);
+    const endIndex = monthToIndex(endMonth);
+
+    if (startIndex === null || endIndex === null || endIndex < startIndex) {
+        return { totalMonths: 0, remainingMonths: 0 };
+    }
+
+    const now = new Date();
+    const currentIndex = (now.getFullYear() * 12) + now.getMonth();
+    const totalMonths = endIndex - startIndex + 1;
+
+    let remainingMonths = 0;
+    if (currentIndex < startIndex) {
+        remainingMonths = totalMonths;
+    } else if (currentIndex <= endIndex) {
+        remainingMonths = endIndex - currentIndex + 1;
+    }
+
+    return { totalMonths, remainingMonths };
+}
+
+function getMonthRangeWarning(startMonth, endMonth) {
+    if (!startMonth || !endMonth) return '';
+    const startIndex = monthToIndex(startMonth);
+    const endIndex = monthToIndex(endMonth);
+    if (startIndex === null || endIndex === null) return '';
+    if (endIndex < startIndex) return 'End month cannot be earlier than start month.';
+    return '';
+}
+
+function setMonthRangeValidation(startInputId, endInputId, warningId) {
+    const startMonth = document.getElementById(startInputId).value;
+    const endMonth = document.getElementById(endInputId).value;
+    const warning = getMonthRangeWarning(startMonth, endMonth);
+    document.getElementById(warningId).textContent = warning;
+    document.getElementById(endInputId).setCustomValidity(warning);
+    return !warning;
+}
+
+function calculateLoanMetrics(monthlyAmount, interestRate, remainingMonths, principalAmount, formulaMode = 'reducing') {
+    const monthly = parseAmount(monthlyAmount);
+    const annualRate = parseAmount(interestRate);
+    const months = Number(remainingMonths) || 0;
+    const principal = parseAmount(principalAmount);
+
+    if (monthly <= 0 || months <= 0) {
+        return { outstandingAmount: 0, interestPayable: 0 };
+    }
+
+    if (formulaMode === 'flat') {
+        const basePrincipal = principal > 0 ? principal : monthly * months;
+        const interestPayable = (basePrincipal * annualRate * months) / (12 * 100);
+        return {
+            outstandingAmount: Number((basePrincipal + interestPayable).toFixed(2)),
+            interestPayable: Number(interestPayable.toFixed(2))
+        };
+    }
+
+    let outstandingAmount = monthly * months;
+    if (annualRate > 0) {
+        const monthlyRate = annualRate / 12 / 100;
+        outstandingAmount = monthly * (1 - Math.pow(1 + monthlyRate, -months)) / monthlyRate;
+    }
+    const totalFuturePayments = monthly * months;
+    const interestPayable = Math.max(totalFuturePayments - outstandingAmount, 0);
+
+    return {
+        outstandingAmount: Number(outstandingAmount.toFixed(2)),
+        interestPayable: Number(interestPayable.toFixed(2))
+    };
+}
+
+function getLoanFormulaHelpText(formulaMode) {
+    if (formulaMode === 'flat') {
+        return 'Flat Rate: Interest = Principal x Rate x Time; Outstanding = Principal + Interest.';
+    }
+    return 'Reducing Balance: Outstanding derived from EMI present value; interest is total future EMIs minus outstanding.';
+}
+
+function updateLoanFormulaHelp(helpElementId, formulaMode, isLoan) {
+    const helpEl = document.getElementById(helpElementId);
+    helpEl.textContent = isLoan ? getLoanFormulaHelpText(formulaMode) : '';
+}
+
+function updateMainTypeVisibility() {
+    const type = document.getElementById('emi-type').value;
+    const isLoan = type === 'Loan';
+    const isChit = type === 'Chit';
+
+    document.querySelectorAll('.loan-only-field').forEach(el => {
+        el.style.display = isLoan ? '' : 'none';
+    });
+    document.querySelectorAll('.chit-only-field').forEach(el => {
+        el.style.display = isChit ? '' : 'none';
+    });
+
+    document.getElementById('emi-principal').required = isLoan;
+    document.getElementById('emi-chit-value').required = isChit;
+}
+
+function updateEditTypeVisibility() {
+    const type = document.getElementById('edit-emi-type').value;
+    const isLoan = type === 'Loan';
+    const isChit = type === 'Chit';
+
+    document.querySelectorAll('.edit-loan-only-field').forEach(el => {
+        el.style.display = isLoan ? '' : 'none';
+    });
+    document.querySelectorAll('.edit-chit-only-field').forEach(el => {
+        el.style.display = isChit ? '' : 'none';
+    });
+
+    document.getElementById('edit-emi-principal').required = isLoan;
+    document.getElementById('edit-emi-chit-value').required = isChit;
+}
+
+function updateMainEMICalculations() {
+    const startMonth = document.getElementById('emi-start-month').value;
+    const endMonth = document.getElementById('emi-end-month').value;
+    const monthly = document.getElementById('emi-monthly').value;
+    const interestRate = document.getElementById('emi-interest-rate').value;
+    const principalAmount = document.getElementById('emi-principal').value;
+    const formulaMode = document.getElementById('emi-loan-formula').value;
+    const type = document.getElementById('emi-type').value;
+    const isLoan = type === 'Loan';
+    setMonthRangeValidation('emi-start-month', 'emi-end-month', 'emi-month-warning');
+    updateLoanFormulaHelp('emi-loan-formula-help', formulaMode, isLoan);
+
+    const { totalMonths, remainingMonths } = calculateMonthStats(startMonth, endMonth);
+    document.getElementById('emi-total-months').value = totalMonths;
+    document.getElementById('emi-pending-months-input').value = remainingMonths;
+
+    if (isLoan) {
+        const metrics = calculateLoanMetrics(monthly, interestRate, remainingMonths, principalAmount, formulaMode);
+        document.getElementById('emi-outstanding-amount').value = metrics.outstandingAmount;
+        document.getElementById('emi-interest-payable').value = metrics.interestPayable;
+    } else {
+        document.getElementById('emi-outstanding-amount').value = '';
+        document.getElementById('emi-interest-payable').value = '';
+    }
+}
+
+function updateEditEMICalculations() {
+    const startMonth = document.getElementById('edit-emi-start-month').value;
+    const endMonth = document.getElementById('edit-emi-end-month').value;
+    const monthly = document.getElementById('edit-emi-monthly').value;
+    const interestRate = document.getElementById('edit-emi-interest-rate').value;
+    const principalAmount = document.getElementById('edit-emi-principal').value;
+    const formulaMode = document.getElementById('edit-emi-loan-formula').value;
+    const type = document.getElementById('edit-emi-type').value;
+    const isLoan = type === 'Loan';
+    setMonthRangeValidation('edit-emi-start-month', 'edit-emi-end-month', 'edit-emi-month-warning');
+    updateLoanFormulaHelp('edit-emi-loan-formula-help', formulaMode, isLoan);
+
+    const { totalMonths, remainingMonths } = calculateMonthStats(startMonth, endMonth);
+    document.getElementById('edit-emi-total-months').value = totalMonths;
+    document.getElementById('edit-emi-pending').value = remainingMonths;
+
+    if (isLoan) {
+        const metrics = calculateLoanMetrics(monthly, interestRate, remainingMonths, principalAmount, formulaMode);
+        document.getElementById('edit-emi-outstanding-amount').value = metrics.outstandingAmount;
+        document.getElementById('edit-emi-interest-payable').value = metrics.interestPayable;
+    } else {
+        document.getElementById('edit-emi-outstanding-amount').value = '';
+        document.getElementById('edit-emi-interest-payable').value = '';
+    }
+}
+
+function normalizeEMI(emi) {
+    const type = emi.type === 'EMI' ? 'Loan' : emi.type;
+    const monthlyAmount = parseAmount(emi.monthlyAmount ?? emi.monthlyEmiAmount);
+    const startMonth = emi.startMonth || (emi.startDate ? emi.startDate.slice(0, 7) : '');
+    const endMonth = emi.endMonth || (emi.maturityDate ? emi.maturityDate.slice(0, 7) : '');
+    const stats = calculateMonthStats(startMonth, endMonth);
+    const remainingMonths = Number(emi.remainingMonths ?? emi.monthsPending ?? stats.remainingMonths);
+    const totalMonths = Number(emi.totalMonths ?? stats.totalMonths);
+    const interestRate = parseAmount(emi.interestRate);
+    const formulaMode = emi.loanFormula || 'reducing';
+    const derivedLoan = calculateLoanMetrics(monthlyAmount, interestRate, remainingMonths, emi.principalAmount, formulaMode);
+
+    return {
+        ...emi,
+        type: type || 'Loan',
+        name: emi.name || emi.description || 'Untitled',
+        chitValue: parseAmount(emi.chitValue),
+        principalAmount: parseAmount(emi.principalAmount),
+        monthlyAmount,
+        startMonth,
+        endMonth,
+        totalMonths,
+        remainingMonths,
+        lenderName: emi.lenderName || emi.bankName || '',
+        loanType: emi.loanType || '',
+        loanFormula: formulaMode,
+        interestRate,
+        outstandingAmount: parseAmount(emi.outstandingAmount) || derivedLoan.outstandingAmount,
+        interestPayable: parseAmount(emi.interestPayable) || derivedLoan.interestPayable,
+        notes: emi.notes || ''
+    };
+}
+
 async function loadEMIs() {
     try {
-        allEMIs = await getAllEMIs();
+        allEMIs = (await getAllEMIs()).map(normalizeEMI);
         renderEMIs();
         updateEMIDashboard();
     } catch (error) {
@@ -757,32 +994,49 @@ async function handleAddEMI(e) {
 
     const emi = {
         type: document.getElementById('emi-type').value,
-        description: document.getElementById('emi-description').value,
+        name: document.getElementById('emi-name').value.trim(),
+        chitValue: document.getElementById('emi-chit-value').value,
         principalAmount: document.getElementById('emi-principal').value,
-        totalEmiAmount: document.getElementById('emi-total-amount').value,
-        monthlyEmiAmount: document.getElementById('emi-monthly').value,
+        monthlyAmount: document.getElementById('emi-monthly').value,
+        startMonth: document.getElementById('emi-start-month').value,
+        endMonth: document.getElementById('emi-end-month').value,
         totalMonths: document.getElementById('emi-total-months').value,
-        monthsPending: document.getElementById('emi-pending-months-input').value,
+        remainingMonths: document.getElementById('emi-pending-months-input').value,
         interestRate: document.getElementById('emi-interest-rate').value || '0',
-        startDate: document.getElementById('emi-start-date').value,
-        maturityDate: document.getElementById('emi-maturity-date').value,
-        dueDate: document.getElementById('emi-due-date').value,
-        bankName: document.getElementById('emi-bank').value,
+        loanFormula: document.getElementById('emi-loan-formula').value,
+        outstandingAmount: document.getElementById('emi-outstanding-amount').value || '0',
+        interestPayable: document.getElementById('emi-interest-payable').value || '0',
+        lenderName: document.getElementById('emi-bank').value.trim(),
+        loanType: document.getElementById('emi-loan-type').value.trim(),
         notes: document.getElementById('emi-notes').value
     };
 
-    if (!emi.type || !emi.description || !emi.dueDate) {
+    if (!emi.type || !emi.name || !emi.monthlyAmount || !emi.startMonth || !emi.endMonth) {
         showMessage('emi-form-message', 'Please fill all required fields', 'error');
+        return;
+    }
+    if (emi.type === 'Loan' && !emi.principalAmount) {
+        showMessage('emi-form-message', 'Loan principal value is required', 'error');
+        return;
+    }
+    if (emi.type === 'Chit' && !emi.chitValue) {
+        showMessage('emi-form-message', 'Chit value is required', 'error');
+        return;
+    }
+    if (!setMonthRangeValidation('emi-start-month', 'emi-end-month', 'emi-month-warning')) {
+        showMessage('emi-form-message', 'Please correct month range before saving', 'error');
         return;
     }
 
     try {
         await addEMI(emi);
-        showMessage('emi-form-message', 'EMI/Chit added successfully!', 'success');
+        showMessage('emi-form-message', 'Loan/Chit added successfully!', 'success');
         document.getElementById('emi-form').reset();
+        updateMainTypeVisibility();
+        updateMainEMICalculations();
         loadEMIs();
     } catch (error) {
-        showMessage('emi-form-message', 'Error adding EMI/Chit', 'error');
+        showMessage('emi-form-message', 'Error adding Loan/Chit', 'error');
         console.error(error);
     }
 }
@@ -791,59 +1045,77 @@ function renderEMIs(emis = allEMIs) {
     const container = document.getElementById('emi-list');
 
     if (emis.length === 0) {
-        container.innerHTML = '<p class="no-data">No EMI/Chit records found</p>';
+        container.innerHTML = '<p class="no-data">No Loan/Chit records found</p>';
         return;
     }
 
-    // Sort by due date
-    const sorted = [...emis].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+    const sorted = [...emis].sort((a, b) => (a.endMonth || '').localeCompare(b.endMonth || ''));
 
     container.innerHTML = sorted.map(emi => {
-        const daysUntilDue = daysTillDue(emi.dueDate);
-        const pendingAmount = calculatePendingAmount(emi.monthlyEmiAmount, emi.monthsPending);
+        const pendingAmount = emi.type === 'Loan'
+            ? emi.outstandingAmount
+            : calculatePendingAmount(emi.monthlyAmount, emi.remainingMonths);
         const typeClass = emi.type.toLowerCase();
+        const typeSpecificDetails = emi.type === 'Loan'
+            ? `
+                <div class="emi-detail-item">
+                    <div class="emi-detail-label">Principal</div>
+                    <div class="emi-detail-value amount">${formatCurrency(emi.principalAmount)}</div>
+                </div>
+                <div class="emi-detail-item">
+                    <div class="emi-detail-label">Lender / Loan Type</div>
+                    <div class="emi-detail-value">${emi.lenderName || '-'}${emi.loanType ? ` / ${emi.loanType}` : ''}</div>
+                </div>
+                <div class="emi-detail-item">
+                    <div class="emi-detail-label">Interest Rate</div>
+                    <div class="emi-detail-value">${emi.interestRate.toFixed(2)}%</div>
+                </div>
+                <div class="emi-detail-item">
+                    <div class="emi-detail-label">Formula</div>
+                    <div class="emi-detail-value">${emi.loanFormula === 'flat' ? 'Flat Rate' : 'Reducing Balance'}</div>
+                </div>
+                <div class="emi-detail-item">
+                    <div class="emi-detail-label">Outstanding</div>
+                    <div class="emi-detail-value pending">${formatCurrency(emi.outstandingAmount)}</div>
+                </div>
+                <div class="emi-detail-item">
+                    <div class="emi-detail-label">Interest Yet To Pay</div>
+                    <div class="emi-detail-value pending">${formatCurrency(emi.interestPayable)}</div>
+                </div>
+            `
+            : `
+                <div class="emi-detail-item">
+                    <div class="emi-detail-label">Chit Value</div>
+                    <div class="emi-detail-value amount">${formatCurrency(emi.chitValue)}</div>
+                </div>
+            `;
 
         return `
             <div class="emi-record">
                 <div class="emi-record-header">
                     <div>
-                        <span class="emi-record-title">${emi.description}</span>
+                        <span class="emi-record-title">${emi.name}</span>
                         <span class="emi-type-badge ${typeClass}">${emi.type}</span>
                     </div>
                 </div>
                 <div class="emi-record-details">
                     <div class="emi-detail-item">
-                        <div class="emi-detail-label">Principal Amount</div>
-                        <div class="emi-detail-value amount">${formatCurrency(emi.principalAmount)}</div>
+                        <div class="emi-detail-label">Monthly Amount</div>
+                        <div class="emi-detail-value amount">${formatCurrency(emi.monthlyAmount)}</div>
                     </div>
                     <div class="emi-detail-item">
-                        <div class="emi-detail-label">Monthly EMI</div>
-                        <div class="emi-detail-value amount">${formatCurrency(emi.monthlyEmiAmount)}</div>
+                        <div class="emi-detail-label">Duration</div>
+                        <div class="emi-detail-value">${emi.startMonth || '-'} to ${emi.endMonth || '-'}</div>
                     </div>
                     <div class="emi-detail-item">
-                        <div class="emi-detail-label">Months Pending</div>
-                        <div class="emi-detail-value pending">${emi.monthsPending} / ${emi.totalMonths}</div>
+                        <div class="emi-detail-label">Remaining Months</div>
+                        <div class="emi-detail-value pending">${emi.remainingMonths} / ${emi.totalMonths}</div>
                     </div>
                     <div class="emi-detail-item">
-                        <div class="emi-detail-label">Pending Amount</div>
+                        <div class="emi-detail-label">${emi.type === 'Loan' ? 'Outstanding Amount' : 'Pending Amount'}</div>
                         <div class="emi-detail-value pending">${formatCurrency(pendingAmount)}</div>
                     </div>
-                    <div class="emi-detail-item">
-                        <div class="emi-detail-label">Due Date</div>
-                        <div class="emi-detail-value">${formatDate(emi.dueDate)}</div>
-                    </div>
-                    <div class="emi-detail-item">
-                        <div class="emi-detail-label">Days Until Due</div>
-                        <div class="emi-detail-value ${daysUntilDue < 5 ? 'due-soon' : ''}">${daysUntilDue} days</div>
-                    </div>
-                    <div class="emi-detail-item">
-                        <div class="emi-detail-label">Bank/Lender</div>
-                        <div class="emi-detail-value">${emi.bankName || '-'}</div>
-                    </div>
-                    <div class="emi-detail-item">
-                        <div class="emi-detail-label">Start Date</div>
-                        <div class="emi-detail-value">${formatDate(emi.startDate)}</div>
-                    </div>
+                    ${typeSpecificDetails}
                 </div>
                 ${emi.notes ? `<div style="background: white; padding: 0.75rem; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 1rem;"><strong>Notes:</strong> ${emi.notes}</div>` : ''}
                 <div class="emi-record-actions">
@@ -870,14 +1142,24 @@ function handleEditEMIClick(e) {
     if (emi) {
         currentEditEMIId = emiId;
         document.getElementById('edit-emi-type').value = emi.type;
-        document.getElementById('edit-emi-description').value = emi.description;
+        document.getElementById('edit-emi-name').value = emi.name;
+        document.getElementById('edit-emi-chit-value').value = emi.chitValue || '';
         document.getElementById('edit-emi-principal').value = emi.principalAmount;
-        document.getElementById('edit-emi-total-amount').value = emi.totalEmiAmount;
-        document.getElementById('edit-emi-monthly').value = emi.monthlyEmiAmount;
-        document.getElementById('edit-emi-pending').value = emi.monthsPending;
-        document.getElementById('edit-emi-due-date').value = emi.dueDate;
-        document.getElementById('edit-emi-bank').value = emi.bankName || '';
+        document.getElementById('edit-emi-monthly').value = emi.monthlyAmount;
+        document.getElementById('edit-emi-start-month').value = emi.startMonth;
+        document.getElementById('edit-emi-end-month').value = emi.endMonth;
+        document.getElementById('edit-emi-total-months').value = emi.totalMonths;
+        document.getElementById('edit-emi-pending').value = emi.remainingMonths;
+        document.getElementById('edit-emi-bank').value = emi.lenderName || '';
+        document.getElementById('edit-emi-loan-type').value = emi.loanType || '';
+        document.getElementById('edit-emi-interest-rate').value = emi.interestRate || '';
+        document.getElementById('edit-emi-loan-formula').value = emi.loanFormula || 'reducing';
+        document.getElementById('edit-emi-outstanding-amount').value = emi.outstandingAmount || '';
+        document.getElementById('edit-emi-interest-payable').value = emi.interestPayable || '';
+        document.getElementById('edit-emi-notes').value = emi.notes || '';
 
+        updateEditTypeVisibility();
+        updateEditEMICalculations();
         openEMIModal();
     }
 }
@@ -889,23 +1171,43 @@ async function handleEditEMI(e) {
 
     const updatedEMI = {
         type: document.getElementById('edit-emi-type').value,
-        description: document.getElementById('edit-emi-description').value,
+        name: document.getElementById('edit-emi-name').value.trim(),
+        chitValue: document.getElementById('edit-emi-chit-value').value,
         principalAmount: document.getElementById('edit-emi-principal').value,
-        totalEmiAmount: document.getElementById('edit-emi-total-amount').value,
-        monthlyEmiAmount: document.getElementById('edit-emi-monthly').value,
-        monthsPending: document.getElementById('edit-emi-pending').value,
-        dueDate: document.getElementById('edit-emi-due-date').value,
-        bankName: document.getElementById('edit-emi-bank').value,
-        startDate: allEMIs.find(e => e.id === currentEditEMIId).startDate,
-        maturityDate: allEMIs.find(e => e.id === currentEditEMIId).maturityDate,
-        totalMonths: allEMIs.find(e => e.id === currentEditEMIId).totalMonths,
-        interestRate: allEMIs.find(e => e.id === currentEditEMIId).interestRate,
-        notes: allEMIs.find(e => e.id === currentEditEMIId).notes
+        monthlyAmount: document.getElementById('edit-emi-monthly').value,
+        startMonth: document.getElementById('edit-emi-start-month').value,
+        endMonth: document.getElementById('edit-emi-end-month').value,
+        totalMonths: document.getElementById('edit-emi-total-months').value,
+        remainingMonths: document.getElementById('edit-emi-pending').value,
+        lenderName: document.getElementById('edit-emi-bank').value.trim(),
+        loanType: document.getElementById('edit-emi-loan-type').value.trim(),
+        interestRate: document.getElementById('edit-emi-interest-rate').value || '0',
+        loanFormula: document.getElementById('edit-emi-loan-formula').value,
+        outstandingAmount: document.getElementById('edit-emi-outstanding-amount').value || '0',
+        interestPayable: document.getElementById('edit-emi-interest-payable').value || '0',
+        notes: document.getElementById('edit-emi-notes').value
     };
+
+    if (!updatedEMI.type || !updatedEMI.name || !updatedEMI.monthlyAmount || !updatedEMI.startMonth || !updatedEMI.endMonth) {
+        showMessage('emi-form-message', 'Please fill all required fields', 'error');
+        return;
+    }
+    if (updatedEMI.type === 'Loan' && !updatedEMI.principalAmount) {
+        showMessage('emi-form-message', 'Loan principal value is required', 'error');
+        return;
+    }
+    if (updatedEMI.type === 'Chit' && !updatedEMI.chitValue) {
+        showMessage('emi-form-message', 'Chit value is required', 'error');
+        return;
+    }
+    if (!setMonthRangeValidation('edit-emi-start-month', 'edit-emi-end-month', 'edit-emi-month-warning')) {
+        showMessage('emi-form-message', 'Please correct month range before saving', 'error');
+        return;
+    }
 
     try {
         await updateEMI(currentEditEMIId, updatedEMI);
-        showMessage('emi-form-message', 'EMI/Chit updated successfully!', 'success');
+        showMessage('emi-form-message', 'Loan/Chit updated successfully!', 'success');
         closeEMIModal();
         loadEMIs();
     } catch (error) {
@@ -917,10 +1219,10 @@ async function handleDeleteEMI(e) {
     const emiId = parseInt(e.target.dataset.id);
     const emi = allEMIs.find(em => em.id === emiId);
 
-    if (confirm(`Delete "${emi.description}" (${emi.type})?`)) {
+    if (confirm(`Delete "${emi.name}" (${emi.type})?`)) {
         try {
             await deleteEMI(emiId);
-            showMessage('emi-form-message', 'EMI/Chit deleted successfully!', 'success');
+            showMessage('emi-form-message', 'Loan/Chit deleted successfully!', 'success');
             loadEMIs();
         } catch (error) {
             console.error('Error deleting EMI:', error);
@@ -951,4 +1253,3 @@ async function updateEMIDashboard() {
         console.error('Error updating EMI dashboard:', error);
     }
 }
-
