@@ -289,6 +289,17 @@
                 <button class="btn btn-secondary" id="export-csv-btn">📥 Export to CSV</button>
             </div>
 
+            <div class="form-group" style="margin-bottom: 2rem;">
+                <h3>Backup & Restore (JSON)</h3>
+                <p style="margin-bottom: 1rem; color: var(--text-light);">Export all saved data and import on any device. Import only adds new records; existing data is kept.</p>
+                <div class="category-input">
+                    <button class="btn btn-primary" id="export-json-btn" type="button">Export Full Backup JSON</button>
+                    <button class="btn btn-secondary" id="import-json-btn" type="button">Import Backup JSON</button>
+                    <input type="file" id="import-json-input" accept=".json,application/json" style="display: none;">
+                </div>
+                <div id="backup-message" class="message"></div>
+            </div>
+
             <div class="summary-cards">
                 <div class="card">
                     <h3>Total Expenses (Month)</h3>

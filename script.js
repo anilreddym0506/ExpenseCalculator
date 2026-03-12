@@ -62,6 +62,11 @@ function setupEventListeners() {
     // Summary
     document.getElementById('summary-month').addEventListener('change', updateSummary);
     document.getElementById('export-csv-btn').addEventListener('click', exportToCSV);
+    document.getElementById('export-json-btn').addEventListener('click', exportBackupJSON);
+    document.getElementById('import-json-btn').addEventListener('click', () => {
+        document.getElementById('import-json-input').click();
+    });
+    document.getElementById('import-json-input').addEventListener('change', handleImportBackupJSON);
 
     // Recurring expenses
     document.getElementById('generate-recurring-btn').addEventListener('click', generateRecurringExpenses);
@@ -736,6 +741,203 @@ async function exportToCSV() {
     } catch (error) {
         console.error('Error exporting CSV:', error);
         showMessage('add-expense-message', 'Error exporting to CSV', 'error');
+    }
+}
+
+function normalizeString(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function normalizeAmount(value) {
+    return Number(Number(value || 0).toFixed(2));
+}
+
+function getExpenseSignature(expense) {
+    return [
+        expense.date || '',
+        normalizeAmount(expense.amount),
+        normalizeString(expense.category),
+        normalizeString(expense.description),
+        Boolean(expense.isRecurring),
+        normalizeString(expense.frequency)
+    ].join('|');
+}
+
+function getRecurringSignature(recurring) {
+    return [
+        normalizeString(recurring.category),
+        normalizeAmount(recurring.amount),
+        normalizeString(recurring.description),
+        normalizeString(recurring.frequency)
+    ].join('|');
+}
+
+function getEMISignature(emi) {
+    return [
+        normalizeString(emi.type),
+        normalizeString(emi.name),
+        normalizeString(emi.startMonth),
+        normalizeString(emi.endMonth),
+        normalizeAmount(emi.monthlyAmount),
+        normalizeAmount(emi.principalAmount),
+        normalizeAmount(emi.chitValue),
+        normalizeString(emi.lenderName),
+        normalizeString(emi.loanType),
+        normalizeAmount(emi.interestRate),
+        normalizeString(emi.loanFormula)
+    ].join('|');
+}
+
+async function exportBackupJSON() {
+    try {
+        const [expenses, categories, recurringExpenses, emis] = await Promise.all([
+            getAllExpenses(),
+            getAllCategories(),
+            getAllRecurringExpenses(),
+            getAllEMIs()
+        ]);
+
+        const backup = {
+            app: 'ExpenseTracker',
+            schemaVersion: 1,
+            exportedAt: new Date().toISOString(),
+            data: {
+                expenses,
+                categories,
+                recurringExpenses,
+                emis
+            }
+        };
+
+        const element = document.createElement('a');
+        element.setAttribute('href', 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backup, null, 2)));
+        element.setAttribute('download', `expense-backup-${new Date().toISOString().slice(0, 10)}.json`);
+        element.style.display = 'none';
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+
+        showMessage('backup-message', 'Backup exported successfully', 'success');
+    } catch (error) {
+        console.error('Error exporting backup JSON:', error);
+        showMessage('backup-message', 'Error exporting backup JSON', 'error');
+    }
+}
+
+async function handleImportBackupJSON(event) {
+    const fileInput = event.target;
+    const file = fileInput.files?.[0];
+    if (!file) return;
+
+    try {
+        const content = await file.text();
+        const parsed = JSON.parse(content);
+        const source = parsed && typeof parsed === 'object' && parsed.data ? parsed.data : parsed;
+
+        const incomingCategories = Array.isArray(source.categories) ? source.categories : [];
+        const incomingExpenses = Array.isArray(source.expenses) ? source.expenses : [];
+        const incomingRecurring = Array.isArray(source.recurringExpenses) ? source.recurringExpenses : [];
+        const incomingEMIs = Array.isArray(source.emis) ? source.emis : [];
+
+        const [existingCategories, existingExpenses, existingRecurring, existingEMIs] = await Promise.all([
+            getAllCategories(),
+            getAllExpenses(),
+            getAllRecurringExpenses(),
+            getAllEMIs()
+        ]);
+
+        const categorySet = new Set(existingCategories.map(cat => normalizeString(cat.name)));
+        const expenseSet = new Set(existingExpenses.map(getExpenseSignature));
+        const recurringSet = new Set(existingRecurring.map(getRecurringSignature));
+        const emiSet = new Set(existingEMIs.map(item => getEMISignature(normalizeEMI(item))));
+
+        let addedCategories = 0;
+        let addedExpenses = 0;
+        let addedRecurring = 0;
+        let addedEMIs = 0;
+
+        for (const category of incomingCategories) {
+            const name = typeof category === 'string' ? category.trim() : String(category?.name || '').trim();
+            const key = normalizeString(name);
+            if (!name || categorySet.has(key)) continue;
+            await addCategory(name);
+            categorySet.add(key);
+            addedCategories++;
+        }
+
+        for (const expense of incomingExpenses) {
+            const normalizedExpense = {
+                date: expense?.date || '',
+                amount: Number(expense?.amount || 0),
+                category: String(expense?.category || '').trim(),
+                description: expense?.description || '',
+                isRecurring: Boolean(expense?.isRecurring),
+                frequency: expense?.frequency || null
+            };
+            const signature = getExpenseSignature(normalizedExpense);
+            if (!normalizedExpense.date || !normalizedExpense.category || expenseSet.has(signature)) continue;
+            await addExpense(normalizedExpense);
+            expenseSet.add(signature);
+            addedExpenses++;
+        }
+
+        for (const recurring of incomingRecurring) {
+            const normalizedRecurring = {
+                category: String(recurring?.category || '').trim(),
+                amount: Number(recurring?.amount || 0),
+                description: recurring?.description || '',
+                frequency: recurring?.frequency || 'monthly'
+            };
+            const signature = getRecurringSignature(normalizedRecurring);
+            if (!normalizedRecurring.category || recurringSet.has(signature)) continue;
+            await addRecurringExpense(normalizedRecurring);
+            recurringSet.add(signature);
+            addedRecurring++;
+        }
+
+        for (const emi of incomingEMIs) {
+            const normalizedEMI = normalizeEMI(emi);
+            const signature = getEMISignature(normalizedEMI);
+            if (!normalizedEMI.name || !normalizedEMI.type || emiSet.has(signature)) continue;
+            await addEMI({
+                type: normalizedEMI.type,
+                name: normalizedEMI.name,
+                monthlyAmount: normalizedEMI.monthlyAmount,
+                startMonth: normalizedEMI.startMonth,
+                endMonth: normalizedEMI.endMonth,
+                totalMonths: normalizedEMI.totalMonths,
+                remainingMonths: normalizedEMI.remainingMonths,
+                chitValue: normalizedEMI.chitValue,
+                principalAmount: normalizedEMI.principalAmount,
+                lenderName: normalizedEMI.lenderName,
+                loanType: normalizedEMI.loanType,
+                loanFormula: normalizedEMI.loanFormula || 'reducing',
+                interestRate: normalizedEMI.interestRate,
+                outstandingAmount: normalizedEMI.outstandingAmount,
+                interestPayable: normalizedEMI.interestPayable,
+                notes: normalizedEMI.notes
+            });
+            emiSet.add(signature);
+            addedEMIs++;
+        }
+
+        await loadCategories();
+        await loadExpenses();
+        renderExpenses();
+        await loadRecurringExpenses();
+        await loadEMIs();
+        updateSummary();
+
+        showMessage(
+            'backup-message',
+            `Import complete. Added: ${addedCategories} categories, ${addedExpenses} expenses, ${addedRecurring} recurring, ${addedEMIs} loan/chit records.`,
+            'success'
+        );
+    } catch (error) {
+        console.error('Error importing backup JSON:', error);
+        showMessage('backup-message', 'Invalid JSON file or import failed', 'error');
+    } finally {
+        fileInput.value = '';
     }
 }
 
